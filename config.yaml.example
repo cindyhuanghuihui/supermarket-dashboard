@@ -1,0 +1,15 @@
+# 帳號設定範本 — 執行 generate_config.py 後會自動產生正式的 config.yaml
+credentials:
+  usernames:
+    admin:
+      email: your-email@example.com
+      name: 管理員
+      password: <執行 generate_config.py 後自動填入雜湊密碼>
+    analyst:
+      email: analyst@example.com
+      name: 分析師
+      password: <執行 generate_config.py 後自動填入雜湊密碼>
+cookie:
+  expiry_days: 30
+  key: 請換成一組隨機字串如 xK9mP2qL7nR4
+  name: supermarket_dashboard_auth
