@@ -1,12 +1,10 @@
+import hashlib
+import hmac
 import os
-import yaml
-from yaml.loader import SafeLoader
 
 import streamlit as st
-import streamlit_authenticator as stauth
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 # ── 頁面基本設定 ──────────────────────────────────────────────
 st.set_page_config(
@@ -16,44 +14,39 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── 讀取帳號設定 ──────────────────────────────────────────────
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+# ── 認證函式 ──────────────────────────────────────────────────
+def _verify(password: str, stored_hash: str) -> bool:
+    h = hashlib.sha256(password.encode()).hexdigest()
+    return hmac.compare_digest(h, stored_hash)
 
-if not os.path.exists(CONFIG_PATH):
-    st.error("找不到 config.yaml，請先執行 `python generate_config.py` 建立帳號設定。")
-    st.stop()
-
-with open(CONFIG_PATH, encoding="utf-8") as f:
-    config = yaml.load(f, Loader=SafeLoader)
-
-# ── 登入元件 ──────────────────────────────────────────────────
-authenticator = stauth.Authenticate(
-    config["credentials"],
-    config["cookie"]["name"],
-    config["cookie"]["key"],
-    config["cookie"]["expiry_days"],
-)
-
-authenticator.login()
-
-auth_status = st.session_state.get("authentication_status")
-name = st.session_state.get("name", "")
-
-if auth_status is False:
-    st.error("帳號或密碼錯誤，請重新輸入。")
-    st.stop()
-
-if auth_status is None:
+def require_login():
+    if st.session_state.get("authenticated"):
+        return
     st.title("🛒 超市銷售儀表板")
-    st.info("請輸入帳號和密碼以繼續。")
+    st.markdown("#### 請登入以查看公司數據")
+    with st.form("login_form"):
+        username = st.text_input("帳號")
+        password = st.text_input("密碼", type="password")
+        submitted = st.form_submit_button("登入", use_container_width=True)
+    if submitted:
+        users = st.secrets.get("users", {})
+        if username in users and _verify(password, users[username]["password_hash"]):
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
+            st.session_state["display_name"] = users[username].get("name", username)
+            st.rerun()
+        else:
+            st.error("帳號或密碼錯誤，請重新輸入。")
     st.stop()
 
-# ── 以下為已登入後的內容 ──────────────────────────────────────
+require_login()
 
-# 側邊欄：使用者資訊 + 登出
+# ── 側邊欄：使用者資訊 + 登出 ────────────────────────────────
 with st.sidebar:
-    st.markdown(f"### 👋 歡迎，{name}！")
-    authenticator.logout("登出", "sidebar")
+    st.markdown(f"### 👋 歡迎，{st.session_state['display_name']}！")
+    if st.button("登出", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
     st.divider()
 
 # ── 資料載入（快取） ──────────────────────────────────────────
@@ -125,7 +118,8 @@ with col_right:
     branch_rev = df.groupby("Branch")["Total"].sum().reset_index()
     fig_branch = px.bar(branch_rev, x="Branch", y="Total", color="Branch",
                         labels={"Total": "營收 ($)", "Branch": "分店"},
-                        template="plotly_white", color_discrete_sequence=px.colors.qualitative.Set2)
+                        template="plotly_white",
+                        color_discrete_sequence=px.colors.qualitative.Set2)
     fig_branch.update_layout(showlegend=False)
     st.plotly_chart(fig_branch, use_container_width=True)
 
